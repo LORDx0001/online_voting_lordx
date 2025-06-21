@@ -1,31 +1,77 @@
-# online_voting_lordx
-## Loyihaning qisqacha tavsifi
+# Online Voting System (online_voting_lordx)
 
-Ushbu loyiha onlayn ovoz berish tizimini yaratishga mo‘ljallangan. Foydalanuvchilar ro‘yxatdan o‘tib, o‘z ovozlarini berishlari mumkin. Tizim administratorlari nomzodlarni qo‘shish va natijalarni ko‘rish imkoniyatiga ega.
+A simple and secure online voting system built with Django.
 
-## Qadam-baqadam yo‘riqnoma
+## Table of Contents
 
-1. **Loyihani yuklab oling va o‘rnating**
-    - `git clone https://github.com/yourusername/online_voting_lordx.git`
-    - Loyihani ishga tushirish uchun kerakli kutubxonalarni o‘rnating.
+- [Online Voting System (online_voting_lordx)](#online-voting-system-online_voting_lordx)
+    - [Table of Contents](#table-of-contents)
+    - [Features](#features)
+    - [Technologies Used](#technologies-used)
+    - [Installation](#installation)
+    - [Usage](#usage)
+    - [Contributing](#contributing)
 
-2. **Ma’lumotlar bazasini sozlang**
-    - Ma’lumotlar bazasini yaratib, konfiguratsiya faylida sozlang.
+## Features
 
-3. **Serverni ishga tushiring**
-    - `python manage.py runserver` yoki mos buyruq orqali serverni ishga tushiring.
+- User registration and authentication
+- Participate in voting processes
+- View voting results
+- Admin dashboard for managing users, votes, and results
 
-4. **Foydalanuvchi sifatida ro‘yxatdan o‘ting**
-    - Ro‘yxatdan o‘tish va tizimga kirish orqali ovoz berishda ishtirok eting.
+## Technologies Used
 
-5. **Administrator sifatida tizimga kiring**
-    - Nomzodlarni qo‘shing va natijalarni kuzating.
+- Python 3.x
+- Django
+- Django Rest Framework
+- SQLite (default, can be changed)
+- Bootstrap (for frontend, if used)
 
-## Foydalanish imkoniyatlari
+## Installation
 
-- Foydalanuvchilar uchun: Ro‘yxatdan o‘tish, tizimga kirish, ovoz berish.
-- Administrator uchun: Nomzodlarni boshqarish, natijalarni ko‘rish.
+1. Clone the repository:
 
-## Hissa qo‘shish
+     ```bash
+     git clone https://github.com/yourusername/online_voting_lordx.git
+     cd online_voting_lordx
+     ```
 
-Taklif va o‘zgarishlar uchun pull request yuborishingiz mumkin.
+2. Create and activate a virtual environment:
+
+     ```bash
+     python3 -m venv venv
+     source venv/bin/activate
+     ```
+
+3. Install dependencies:
+
+     ```bash
+     pip install -r requirements.txt
+     ```
+
+4. Run migrations:
+
+     ```bash
+     python manage.py migrate
+     ```
+
+5. Create a superuser:
+
+     ```bash
+     python manage.py createsuperuser
+     ```
+
+6. Start the development server:
+
+     ```bash
+     python manage.py runserver
+     ```
+
+## Usage
+
+- Open your browser and go to [http://localhost:8000/](http://localhost:8000/)
+- Access the admin panel at [http://localhost:8000/admin/](http://localhost:8000/admin/)
+
+## Contributing
+
+Contributions, pull requests, and issues are welcome!

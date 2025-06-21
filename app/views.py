@@ -1,3 +1,47 @@
+# Bu faylda barcha asosiy API endpointlar va yordamchi funksiyalar joylashgan.
+# Funksiya-based viewlar ishlatilgan (har bir endpoint uchun alohida funksiya).
+# @api_view dekoratori yordamida endpointlar HTTP metodlari bilan belgilanadi.
+# @swagger_auto_schema yordamida Swagger uchun avtomatik hujjatlash qo‘shiladi.
+# Har bir endpoint uchun serializerlar orqali ma’lumotlar validatsiya qilinadi.
+
+# Nima uchun aynan shu usul tanlangan va qanday yechimlar beradi:
+# 1. Funksiya-based viewlar (FBV) — har bir endpoint mustaqil, kod oson o‘qiladi va test qilinadi.
+# 2. Serializerlar — kiruvchi ma’lumotlarni tekshiradi, xatoliklarni aniq ko‘rsatadi, xavfsizlikni oshiradi.
+# 3. JWT tokenlar va OTP — autentifikatsiya va telefon raqamini tasdiqlash uchun ishlatiladi, xavfsizlikni ta’minlaydi.
+# 4. Permission klasslari — rollar bo‘yicha (masalan, staff) endpointlarga kirishni boshqaradi.
+# 5. Swagger dekoratorlari — frontend va test uchun avtomatik API hujjatlash beradi.
+# 6. Har bir funksiya qisqa va aniq, DRF standartlariga mos, kengaytirish va debugging oson.
+
+# home() - Bosh sahifa uchun HTML render qiladi.
+# send_otp_to_telegram() - OTP kodini Telegram bot orqali yuboradi.
+
+# register() - Foydalanuvchini ro‘yxatdan o‘tkazadi, telefon raqamini tekshiradi, OTP yuboradi.
+# verify_otp() - Telefon raqamini OTP orqali tasdiqlaydi.
+# login_view() - Foydalanuvchini login qiladi, JWT token qaytaradi.
+# resend_otp() - Telefon raqami tasdiqlanmagan bo‘lsa, yangi OTP yuboradi.
+
+# poll_list() - Barcha poll (so‘rovnoma)larni va ularning nomzodlarini ko‘rsatadi.
+# poll_detail() - Bitta poll va unga tegishli nomzodlar va ovozlar sonini ko‘rsatadi.
+
+# vote() - Foydalanuvchi ovoz beradi. Har bir poll uchun faqat bir marta ovoz berish mumkin.
+# my_votes() - Foydalanuvchining barcha ovozlarini ko‘rsatadi.
+
+# create_poll() - Staff foydalanuvchi yangi poll yaratishi mumkin (IsStaff permission).
+# create_candidate() - Staff foydalanuvchi yangi kandidat yaratishi mumkin (IsStaff permission).
+
+# reset_password() - Foydalanuvchi eski va yangi parol bilan parolni o‘zgartiradi.
+# forgot_password() - Parolni unutgan foydalanuvchi uchun OTP yuboradi.
+# forgot_password_confirm() - OTP va yangi parol orqali parolni tiklaydi.
+
+# user_info() - Foydalanuvchi o‘z ma’lumotlarini ko‘radi.
+# update_user_info() - Foydalanuvchi o‘z ma’lumotlarini o‘zgartiradi.
+# delete_user() - Foydalanuvchi o‘z akkauntini o‘chiradi.
+
+# Har bir endpointda:
+# - Ma’lumotlar validatsiyasi va xatoliklar uchun aniq javoblar qaytariladi.
+# - Token orqali autentifikatsiya va permissionlar ishlatiladi.
+# - Kod qisqa, aniq va DRF standartlariga mos yozilgan.
+
 import re
 import random
 import requests
