@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Онлайн голосование</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f7f7f7; margin: 0; padding: 0; }
+        .container { max-width: 400px; margin: 40px auto; background: #fff; padding: 24px; border-radius: 8px; box-shadow: 0 2px 8px #0001; }
+        h2 { text-align: center; }
+        .msg { margin: 10px 0; padding: 8px; background: #e0ffe0; border-radius: 4px; color: #222; }
+        .msg.error { background: #ffe0e0; color: #b00; }
+        form { display: flex; flex-direction: column; gap: 10px; }
+        input, select, button { padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+        button { background: #1976d2; color: #fff; border: none; cursor: pointer; }
+        button:hover { background: #125ea8; }
+        .link { color: #1976d2; cursor: pointer; text-decoration: underline; margin-top: 8px; text-align: center; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h2 id="main-title">Онлайн голосование</h2>
+    <div id="msg" class="msg" style="display:none"></div>
+
+    <!-- Login form -->
+    <form id="login-form">
+        <input id="login-phone" type="text" placeholder="Телефон" required>
+        <input id="login-password" type="password" placeholder="Пароль" required>
+        <button type="submit">Войти</button>
+        <div class="link" onclick="showRegister()">Регистрация</div>
+    </form>
+
+    <!-- Register form -->
+    <form id="register-form" class="hidden">
+        <input id="reg-first" type="text" placeholder="Имя" required>
+        <input id="reg-last" type="text" placeholder="Фамилия" required>
+        <input id="reg-phone" type="text" placeholder="Телефон" required>
+        <input id="reg-password" type="password" placeholder="Пароль" required>
+        <select id="reg-role" required>
+            <option value="">Роль</option>
+            <option value="2">Избиратель</option>
+            <option value="3">Стафф</option>
+        </select>
+        <button type="submit">Зарегистрироваться</button>
+        <div class="link" onclick="showLogin()">Уже есть аккаунт?</div>
+    </form>
+</div>
+
+<script>
+function showMsg(msg, error=false) {
+    const m = document.getElementById('msg');
+    m.textContent = msg;
+    m.className = error ? 'msg error' : 'msg';
+    m.style.display = msg ? '' : 'none';
+}
+
+function showLogin() {
+    document.getElementById('main-title').textContent = 'Вход';
+    document.getElementById('login-form').classList.remove('hidden');
+    document.getElementById('register-form').classList.add('hidden');
+    showMsg('');
+}
+
+function showRegister() {
+    document.getElementById('main-title').textContent = 'Регистрация';
+    document.getElementById('login-form').classList.add('hidden');
+    document.getElementById('register-form').classList.remove('hidden');
+    showMsg('');
+}
+
+document.getElementById('login-form').onsubmit = async function(e) {
+    e.preventDefault();
+    const phone = document.getElementById('login-phone').value;
+    const password = document.getElementById('login-password').value;
+    try {
+        const res = await fetch('/api/login/', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({phone, password})
+        });
+        const data = await res.json();
+        if (res.ok) {
+            showMsg('Вход успешен!');
+        } else {
+            showMsg(data.error || data.message || 'Ошибка входа', true);
+        }
+    } catch {
+        showMsg('Ошибка соединения', true);
+    }
+};
+
+document.getElementById('register-form').onsubmit = async function(e) {
+    e.preventDefault();
+    const first_name = document.getElementById('reg-first').value;
+    const last_name = document.getElementById('reg-last').value;
+    const phone = document.getElementById('reg-phone').value;
+    const password = document.getElementById('reg-password').value;
+    const role = document.getElementById('reg-role').value;
+    try {
+        const res = await fetch('/api/register/', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({first_name, last_name, phone, password, role})
+        });
+        const data = await res.json();
+        if (res.ok) {
+            showMsg('Регистрация успешна!');
+            showLogin();
+        } else {
+            showMsg(data.error || data.message || 'Ошибка регистрации', true);
+        }
+    } catch {
+        showMsg('Ошибка соединения', true);
+    }
+};
+
+// Boshlanishida login form ko‘rsatiladi
+showLogin();
+</script>
+</body>
+</html>
