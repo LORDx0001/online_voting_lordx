@@ -73,3 +73,45 @@ class ForgotPasswordConfirmSerializer(serializers.Serializer):
 
 # ForgotPasswordConfirmSerializer:
 # - Parolni tiklash uchun telefon, OTP va yangi parol maydonlarini tekshiradi.
+import random
+
+class UserUpdateSerializer(serializers.Serializer):
+    first_name = serializers.CharField(required=False)
+    last_name = serializers.CharField(required=False)
+    phone = serializers.CharField(required=False)
+    password = serializers.CharField(required=False)
+    otp = serializers.CharField(required=False)
+
+    def validate(self, attrs):
+        phone = attrs.get('phone')
+        otp = attrs.get('otp')
+        user = self.instance
+
+        if phone and phone != user.phone:
+            otp_code = str(random.randint(1000, 9999))
+            attrs['otp_code'] = otp_code
+            attrs['is_phone_verified'] = False
+            from .views import send_otp_to_telegram
+            send_otp_to_telegram(phone, otp_code)
+        return attrs
+
+    def update(self, instance, validated_data):
+        if 'phone' in validated_data and validated_data['phone'] != instance.phone:
+            otp = validated_data.get('otp')
+            otp_code = validated_data.get('otp_code') or instance.otp_code
+            if not otp:
+                raise serializers.ValidationError({'otp': 'Telefon raqamni tasdiqlash uchun OTP kiriting'})
+            if otp != otp_code:
+                raise serializers.ValidationError({'otp': 'OTP noto‘g‘ri'})
+            instance.is_phone_verified = True
+            instance.otp_code = None
+            instance.phone = validated_data['phone']
+        for attr, value in validated_data.items():
+            if attr in ['otp', 'otp_code', 'phone']:
+                continue  # yuqorida ishladik yoki texnik maydon
+            if attr == 'password':
+                instance.set_password(value)
+            else:
+                setattr(instance, attr, value)
+        instance.save()
+        return instance

@@ -33,4 +33,9 @@ urlpatterns = [
     path('user/info/', views.user_info, name='user_info'),
     path('user/update-profile/', views.update_user_info, name='update_profile'),
     path('user/delete-account/', views.delete_user, name='delete_account'),
+    path('staff/update-poll/<int:poll_id>/', views.update_poll, name='update_poll'),
+    path('staff/delete-poll/<int:poll_id>/', views.delete_poll, name='delete_poll'),
+    path('staff/update-candidate/<int:candidate_id>/', views.update_candidate, name='update_candidate'),
+    path('staff/delete-candidate/<int:candidate_id>/', views.delete_candidate, name='delete_candidate'),
+    path('polls/finished-polls/', views.finished_polls, name='finished_polls'),
 ]

@@ -60,9 +60,13 @@ from .serializers import (
 )
 from .permissions import IsStaff
 from django.shortcuts import render
+from django.utils import timezone
+from .serializers import RegisterSerializer
+from .serializers import UserUpdateSerializer
 
 def home(request):
     return render(request, 'home.html')
+
 def send_otp_to_telegram(phone, otp):
     token = settings.TELEGRAM_BOT_TOKEN
     chat_id = settings.TELEGRAM_CHAT_ID
@@ -214,7 +218,6 @@ def poll_detail(request, poll_id):
         ]
     }
     return Response(data)
-
 @swagger_auto_schema(method='post', request_body=VoteSerializer)
 @api_view(['POST'])
 def vote(request):
@@ -223,6 +226,9 @@ def vote(request):
     poll_id = request.data.get('poll_id')
     candidate_id = request.data.get('candidate_id')
     poll = get_object_or_404(Poll, id=poll_id)
+
+    if poll.end_time and poll.end_time < timezone.now():
+        return Response({'error': 'Время голосования по этому опросу истекло'}, status=400)
     candidate = get_object_or_404(Candidate, id=candidate_id, poll=poll)
     voter = request.user
     if Vote.objects.filter(voter=voter, poll=poll).exists():
@@ -333,28 +339,17 @@ def user_info(request):
     }
     return Response(data)
 
-@swagger_auto_schema(method='patch')
+@swagger_auto_schema(method='patch', request_body=UserUpdateSerializer)
 @api_view(['PATCH'])
 def update_user_info(request):
     if not request.user.is_authenticated:
         return Response({'error': 'Требуется токен'}, status=401)
     user = request.user
-    first_name = request.data.get('first_name')
-    last_name = request.data.get('last_name')
-    phone = request.data.get('phone')
-
-    if first_name:
-        user.first_name = first_name
-    if last_name:
-        user.last_name = last_name
-    if phone:
-        phone_pattern = r'^\+998\d{9}$'
-        if not re.match(phone_pattern, phone):
-            return Response({'error': 'Телефон номер должен начинаться с +998 и состоять из 13 символов. Например: +998901234567'}, status=400)
-        user.phone = phone
-
-    user.save()
-    return Response({'msg': 'Информация пользователя успешно обновлена'})
+    serializer = UserUpdateSerializer(user, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response({'msg': 'Информация пользователя успешно обновлена'})
+    return Response(serializer.errors, status=400)
 
 @swagger_auto_schema(method='delete')
 @api_view(['DELETE'])
@@ -365,3 +360,153 @@ def delete_user(request):
     user.delete()
     return Response({'msg': 'Пользователь успешно удален'}, status=204)
 
+@swagger_auto_schema(method='patch')
+@api_view(['PATCH'])
+def update_poll(request, poll_id):
+    if not request.user.is_authenticated or not request.user.is_staff:
+        return Response({'error': 'Требуется токен и права staff'}, status=403)
+    poll = get_object_or_404(Poll, id=poll_id)
+    serializer = PollCreateSerializer(poll, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=200)
+    return Response(serializer.errors, status=400)
+
+@swagger_auto_schema(method='patch')
+@api_view(['PATCH'])
+def update_candidate(request, candidate_id):
+    if not request.user.is_authenticated or not request.user.is_staff:
+        return Response({'error': 'Требуется токен и права staff'}, status=403)
+    candidate = get_object_or_404(Candidate, id=candidate_id)
+    serializer = CandidateCreateSerializer(candidate, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=200)
+    return Response(serializer.errors, status=400)
+
+@swagger_auto_schema(method='patch')
+@api_view(['PATCH'])
+@permission_classes([IsStaff])
+def update_poll_candidates(request, poll_id):
+    poll = get_object_or_404(Poll, id=poll_id)
+    candidate_ids = request.data.get('candidate_ids')
+    if not isinstance(candidate_ids, list):
+        return Response({'error': 'candidate_ids must be a list of candidate IDs'}, status=400)
+    candidates = Candidate.objects.filter(id__in=candidate_ids, poll=poll)
+    if candidates.count() != len(candidate_ids):
+        return Response({'error': 'Some candidates not found in this poll'}, status=400)
+    poll.candidates.set(candidates)
+    poll.save()
+    return Response({'msg': 'Candidates updated for poll'}, status=200)
+
+@swagger_auto_schema(method='delete')
+@api_view(['DELETE'])
+@permission_classes([IsStaff])
+def delete_poll(request, poll_id):
+    poll = get_object_or_404(Poll, id=poll_id)
+    poll.delete()
+    return Response({'msg': 'Poll deleted successfully'}, status=204)
+
+@swagger_auto_schema(method='delete')
+@api_view(['DELETE'])
+@permission_classes([IsStaff])
+def delete_candidate(request, candidate_id):
+    candidate = get_object_or_404(Candidate, id=candidate_id)
+    candidate.delete()
+    return Response({'msg': 'Candidate deleted successfully'}, status=204)
+
+@swagger_auto_schema(method='get')
+@api_view(['GET'])
+def poll_candidates(request, poll_id):
+    poll = get_object_or_404(Poll, id=poll_id)
+    candidates = poll.candidates.all()
+    data = [
+        {
+            'id': candidate.id,
+            'name': candidate.name,
+            'info': candidate.info,
+            'votes': Vote.objects.filter(candidate=candidate).count()
+        } for candidate in candidates
+    ]
+    return Response(data)
+
+@swagger_auto_schema(method='get')
+@api_view(['GET'])
+def poll_votes(request, poll_id):
+    poll = get_object_or_404(Poll, id=poll_id)
+    votes = Vote.objects.filter(poll=poll).select_related('voter', 'candidate')
+    total_votes = votes.count()
+    candidate_stats = {}
+    last_vote_time = None
+    winner_candidates = []
+    winner = None
+
+    # Count votes per candidate and track last vote time for tie-break
+    for vote in votes.order_by('voted_at'):
+        cid = vote.candidate.id
+        if cid not in candidate_stats:
+            candidate_stats[cid] = {
+                'candidate': {
+                    'id': vote.candidate.id,
+                    'name': vote.candidate.name,
+                    'info': vote.candidate.info
+                },
+                'votes': 0,
+                'last_vote_time': None
+            }
+        candidate_stats[cid]['votes'] += 1
+        candidate_stats[cid]['last_vote_time'] = vote.voted_at
+
+    # Prepare stats with percent
+    stats = []
+    max_votes = 0
+    for c in candidate_stats.values():
+        c['percent'] = round((c['votes'] / total_votes) * 100, 2) if total_votes else 0
+        stats.append({
+            **c['candidate'],
+            'votes': c['votes'],
+            'percent': c['percent']
+        })
+        if c['votes'] > max_votes:
+            max_votes = c['votes']
+
+    # Find all candidates with max votes
+    for c in candidate_stats.values():
+        if c['votes'] == max_votes:
+            winner_candidates.append(c)
+
+    # Tie-break: pick candidate with latest vote
+    if winner_candidates:
+        winner = max(winner_candidates, key=lambda c: c['last_vote_time'])
+
+    data = {
+        'total_votes': total_votes,
+        'candidates': stats,
+        'winner': winner['candidate'] if winner else None
+    }
+    return Response(data)
+
+@swagger_auto_schema(method='get')
+@api_view(['GET'])
+def finished_polls(request):
+
+    now = timezone.now()
+    polls = Poll.objects.filter(end_time__lt=now)
+    data = []
+    for poll in polls:
+        candidates = poll.candidates.all()
+        data.append({
+            'id': poll.id,
+            'title': poll.title,
+            'description': poll.description,
+            'end_time': poll.end_time,
+            'candidates': [
+                {
+                    'id': candidate.id,
+                    'name': candidate.name,
+                    'info': candidate.info,
+                    'votes': Vote.objects.filter(candidate=candidate).count()
+                } for candidate in candidates
+            ]
+        })
+    return Response(data)
