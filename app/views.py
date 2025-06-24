@@ -44,8 +44,6 @@
 
 import re
 import random
-import requests
-from django.conf import settings
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
@@ -56,24 +54,20 @@ from drf_yasg.utils import swagger_auto_schema
 from .serializers import (
     RegisterSerializer, VerifyOtpSerializer, LoginSerializer, VoteSerializer,
     PollCreateSerializer, CandidateCreateSerializer, ResetPasswordSerializer,
-    ForgotPasswordSendOtpSerializer, ForgotPasswordConfirmSerializer
+    ForgotPasswordSendOtpSerializer, ForgotPasswordConfirmSerializer, ChangeNameSerializer,
+    ChangePhoneNumberSerializer, ChangePhoneNumberVerifySerializer
 )
 from .permissions import IsStaff
 from django.shortcuts import render
 from django.utils import timezone
-from .serializers import RegisterSerializer
-from .serializers import UserUpdateSerializer
+from .utils import send_otp_to_telegram
+from django.contrib.auth import logout
+
 
 def home(request):
     return render(request, 'home.html')
 
-def send_otp_to_telegram(phone, otp):
-    token = settings.TELEGRAM_BOT_TOKEN
-    chat_id = settings.TELEGRAM_CHAT_ID
-    message = f"Телефон номер: {phone}\nOTP код: {otp}"
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-    data = {"chat_id": chat_id, "text": message}
-    requests.post(url, data=data)
+
 
 @swagger_auto_schema(method='post', request_body=RegisterSerializer)
 @api_view(['POST'])
@@ -339,17 +333,74 @@ def user_info(request):
     }
     return Response(data)
 
-@swagger_auto_schema(method='patch', request_body=UserUpdateSerializer)
+@swagger_auto_schema(method='patch', request_body=ChangeNameSerializer)
 @api_view(['PATCH'])
-def update_user_info(request):
+def change_name(request):
     if not request.user.is_authenticated:
         return Response({'error': 'Требуется токен'}, status=401)
     user = request.user
-    serializer = UserUpdateSerializer(user, data=request.data, partial=True)
+    serializer = ChangeNameSerializer(user, data=request.data, partial=True)
     if serializer.is_valid():
         serializer.save()
-        return Response({'msg': 'Информация пользователя успешно обновлена'})
+        return Response({'msg': 'Имя пользователя успешно обновлено'})
     return Response(serializer.errors, status=400)
+
+@swagger_auto_schema(method='patch', request_body=ChangePhoneNumberSerializer)
+@api_view(['PATCH'])
+def change_phone(request):
+    if not request.user.is_authenticated:
+        return Response({'error': 'Требуется токен'}, status=401)
+    user = request.user
+    serializer = ChangePhoneNumberSerializer(instance=user, data=request.data, partial=True)
+    serializer.is_valid(raise_exception=True)
+    new_phone = serializer.validated_data['phone']
+    phone_pattern = r'^\+998\d{9}$'
+    if not re.match(phone_pattern, new_phone):
+        return Response({'error': 'Телефон номер должен начинаться с +998 и состоять из 13 символов. Например: +998901234567'}, status=400)
+    if user.phone == new_phone:
+        return Response({'error': 'Yangi telefon raqam eski raqam bilan bir xil bo‘lishi mumkin emas'}, status=400)
+    if Voter.objects.filter(phone=new_phone, is_phone_verified=True):
+        return Response({'error': 'Bu telefon raqam allaqachon boshqa foydalanuvchi tomonidan tasdiqlangan'}, status=400)
+    otp = str(random.randint(100000, 999999))
+    user.new_phone = new_phone
+    user.phone_change_otp = otp
+    user.save()
+    send_otp_to_telegram(user.phone, otp)
+    return Response({'msg': 'Telefon raqamni o‘zgartirish uchun OTP eski raqamga yuborildi'})
+
+
+
+@swagger_auto_schema(method='post', request_body=ChangePhoneNumberVerifySerializer)
+@api_view(['POST'])
+def verify_new_phone(request):
+    if not request.user.is_authenticated:
+        return Response({'error': 'Требуется токен'}, status=401)
+    user = request.user
+    otp = request.data.get('otp')
+    if not otp:
+        return Response({'error': 'OTP talab qilinadi'}, status=400)
+    if not user.phone_change_otp or user.phone_change_otp != otp:
+        return Response({'error': 'OTP noto‘g‘ri yoki muddati o‘tgan'}, status=400)
+    if not user.new_phone:
+        return Response({'error': 'Yangi telefon raqam topilmadi'}, status=400)
+    
+    # Yangi raqam boshqa tasdiqlangan foydalanuvchiga tegishli emasligini tekshirish
+    if Voter.objects.filter(phone=user.new_phone, is_phone_verified=True).exclude(id=user.id).exists():
+        return Response({'error': 'Bu telefon raqam allaqachon boshqa foydalanuvchi tomonidan tasdiqlangan'}, status=400)
+    
+    user.phone = user.new_phone
+    user.new_phone = None
+    user.phone_change_otp = None
+    user.is_phone_verified = False  # Yangi raqam uchun yana tasdiqlash kerak bo‘lishi mumkin
+    user.save()
+    otp2 = str(random.randint(100000, 999999))
+    user.otp_code = otp2
+    user.save()
+    send_otp_to_telegram(user.phone, otp2)
+
+    logout(request)
+
+    return Response({'msg': 'Phone number changed successfully. You have been logged out. Please verify your new number.'})
 
 @swagger_auto_schema(method='delete')
 @api_view(['DELETE'])

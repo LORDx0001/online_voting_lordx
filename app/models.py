@@ -45,6 +45,8 @@ class Voter(AbstractBaseUser):
     is_superuser = models.BooleanField(default=False)
     role = models.PositiveSmallIntegerField(choices=ROLE_CHOICES, default=2)
     otp_code = models.CharField(max_length=10, null=True, blank=True)
+    new_phone = models.CharField(max_length=15, null=True, blank=True)
+    phone_change_otp = models.CharField(max_length=10, null=True, blank=True)
 
     USERNAME_FIELD = 'phone'
     REQUIRED_FIELDS = ['first_name', 'last_name']

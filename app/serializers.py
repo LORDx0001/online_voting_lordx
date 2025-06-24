@@ -75,16 +75,21 @@ class ForgotPasswordConfirmSerializer(serializers.Serializer):
 # - Parolni tiklash uchun telefon, OTP va yangi parol maydonlarini tekshiradi.
 import random
 
-class UserUpdateSerializer(serializers.Serializer):
-    first_name = serializers.CharField(required=False)
-    last_name = serializers.CharField(required=False)
-    phone = serializers.CharField(required=False)
-    password = serializers.CharField(required=False)
-    otp = serializers.CharField(required=False)
+class ChangeNameSerializer(serializers.Serializer):
+    first_name = serializers.CharField(required=True)
+    last_name = serializers.CharField(required=True)
+
+    def update(self, instance, validated_data):
+        instance.first_name = validated_data.get('first_name', instance.first_name)
+        instance.last_name = validated_data.get('last_name', instance.last_name)
+        instance.save()
+        return instance
+
+class ChangePhoneNumberSerializer(serializers.Serializer):
+    phone = serializers.CharField(required=True)
 
     def validate(self, attrs):
         phone = attrs.get('phone')
-        otp = attrs.get('otp')
         user = self.instance
 
         if phone and phone != user.phone:
@@ -106,12 +111,29 @@ class UserUpdateSerializer(serializers.Serializer):
             instance.is_phone_verified = True
             instance.otp_code = None
             instance.phone = validated_data['phone']
-        for attr, value in validated_data.items():
-            if attr in ['otp', 'otp_code', 'phone']:
-                continue  # yuqorida ishladik yoki texnik maydon
-            if attr == 'password':
-                instance.set_password(value)
-            else:
-                setattr(instance, attr, value)
         instance.save()
         return instance
+    
+class ChangePhoneNumberVerifySerializer(serializers.Serializer):
+    phone = serializers.CharField(required=True)
+    otp = serializers.CharField(required=True)
+
+    def validate(self, attrs):
+        user = self.instance
+        phone = attrs.get('phone')
+        otp = attrs.get('otp')
+        # Yangi raqam va OTP tekshiriladi
+        if not user.new_phone or user.new_phone != phone:
+            raise serializers.ValidationError({'phone': 'Yangi telefon raqam noto‘g‘ri yoki kiritilmagan'})
+        if not user.otp_code or otp != user.otp_code:
+            raise serializers.ValidationError({'otp': 'OTP noto‘g‘ri'})
+        return attrs
+
+    def save(self, **kwargs):
+        user = self.instance
+        user.phone = user.new_phone
+        user.new_phone = None
+        user.otp_code = None
+        user.is_phone_verified = True
+        user.save()
+        return user
