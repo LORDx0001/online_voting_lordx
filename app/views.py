@@ -1,47 +1,3 @@
-# Bu faylda barcha asosiy API endpointlar va yordamchi funksiyalar joylashgan.
-# Funksiya-based viewlar ishlatilgan (har bir endpoint uchun alohida funksiya).
-# @api_view dekoratori yordamida endpointlar HTTP metodlari bilan belgilanadi.
-# @swagger_auto_schema yordamida Swagger uchun avtomatik hujjatlash qo‘shiladi.
-# Har bir endpoint uchun serializerlar orqali ma’lumotlar validatsiya qilinadi.
-
-# Nima uchun aynan shu usul tanlangan va qanday yechimlar beradi:
-# 1. Funksiya-based viewlar (FBV) — har bir endpoint mustaqil, kod oson o‘qiladi va test qilinadi.
-# 2. Serializerlar — kiruvchi ma’lumotlarni tekshiradi, xatoliklarni aniq ko‘rsatadi, xavfsizlikni oshiradi.
-# 3. JWT tokenlar va OTP — autentifikatsiya va telefon raqamini tasdiqlash uchun ishlatiladi, xavfsizlikni ta’minlaydi.
-# 4. Permission klasslari — rollar bo‘yicha (masalan, staff) endpointlarga kirishni boshqaradi.
-# 5. Swagger dekoratorlari — frontend va test uchun avtomatik API hujjatlash beradi.
-# 6. Har bir funksiya qisqa va aniq, DRF standartlariga mos, kengaytirish va debugging oson.
-
-# home() - Bosh sahifa uchun HTML render qiladi.
-# send_otp_to_telegram() - OTP kodini Telegram bot orqali yuboradi.
-
-# register() - Foydalanuvchini ro‘yxatdan o‘tkazadi, telefon raqamini tekshiradi, OTP yuboradi.
-# verify_otp() - Telefon raqamini OTP orqali tasdiqlaydi.
-# login_view() - Foydalanuvchini login qiladi, JWT token qaytaradi.
-# resend_otp() - Telefon raqami tasdiqlanmagan bo‘lsa, yangi OTP yuboradi.
-
-# poll_list() - Barcha poll (so‘rovnoma)larni va ularning nomzodlarini ko‘rsatadi.
-# poll_detail() - Bitta poll va unga tegishli nomzodlar va ovozlar sonini ko‘rsatadi.
-
-# vote() - Foydalanuvchi ovoz beradi. Har bir poll uchun faqat bir marta ovoz berish mumkin.
-# my_votes() - Foydalanuvchining barcha ovozlarini ko‘rsatadi.
-
-# create_poll() - Staff foydalanuvchi yangi poll yaratishi mumkin (IsStaff permission).
-# create_candidate() - Staff foydalanuvchi yangi kandidat yaratishi mumkin (IsStaff permission).
-
-# reset_password() - Foydalanuvchi eski va yangi parol bilan parolni o‘zgartiradi.
-# forgot_password() - Parolni unutgan foydalanuvchi uchun OTP yuboradi.
-# forgot_password_confirm() - OTP va yangi parol orqali parolni tiklaydi.
-
-# user_info() - Foydalanuvchi o‘z ma’lumotlarini ko‘radi.
-# update_user_info() - Foydalanuvchi o‘z ma’lumotlarini o‘zgartiradi.
-# delete_user() - Foydalanuvchi o‘z akkauntini o‘chiradi.
-
-# Har bir endpointda:
-# - Ma’lumotlar validatsiyasi va xatoliklar uchun aniq javoblar qaytariladi.
-# - Token orqali autentifikatsiya va permissionlar ishlatiladi.
-# - Kod qisqa, aniq va DRF standartlariga mos yozilgan.
-
 import re
 import random
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -55,10 +11,11 @@ from .serializers import (
     RegisterSerializer, VerifyOtpSerializer, LoginSerializer, VoteSerializer,
     PollCreateSerializer, CandidateCreateSerializer, ResetPasswordSerializer,
     ForgotPasswordSendOtpSerializer, ForgotPasswordConfirmSerializer, ChangeNameSerializer,
-    ChangePhoneNumberSerializer, ChangePhoneNumberVerifySerializer
+    ChangePhoneNumberSerializer, ChangePhoneNumberVerifySerializer, ResendOtpSerializer
 )
 from .permissions import IsStaff
 from django.shortcuts import render
+import datetime
 from django.utils import timezone
 from .utils import send_otp_to_telegram
 from django.contrib.auth import logout
@@ -83,20 +40,18 @@ def register(request):
     if not re.match(phone_pattern, phone):
         return Response({'error': 'Телефон номер должен начинаться с +998 и состоять из 13 символов. Например: +998901234567'}, status=400)
 
-    # Если номер уже есть, но не верифицирован - отправить новый OTP
     existing_voter = Voter.objects.filter(phone=phone).first()
     if existing_voter:
         if not existing_voter.is_phone_verified:
             otp = str(random.randint(100000, 999999))
             existing_voter.otp_code = otp
-            existing_voter.set_password(password)  # обновить пароль (по желанию)
+            existing_voter.set_password(password)  
             existing_voter.save()
             send_otp_to_telegram(phone, otp)
             return Response({'msg': 'Телефон номер еще не подтвержден. Новый OTP код отправлен.'}, status=200)
         else:
             return Response({'error': 'Этот телефон номер уже зарегистрирован'}, status=400)
 
-    # Создание staff или voter по роли
     if role == 3:
         voter = Voter.objects.create_user(
             first_name=first_name,
@@ -154,7 +109,7 @@ def login_view(request):
         'access': str(refresh.access_token),
     })
 
-@swagger_auto_schema(method='post', request_body=VerifyOtpSerializer)
+@swagger_auto_schema(method='post', request_body=ResendOtpSerializer)
 @api_view(['POST'])
 def resend_otp(request):
     phone = request.data.get('phone')
@@ -171,6 +126,7 @@ def resend_otp(request):
     send_otp_to_telegram(phone, otp)
     return Response({'msg': 'Новый OTP код отправлен.'}, status=200)
 
+@swagger_auto_schema(method= 'get')
 @api_view(['GET'])
 def poll_list(request):
     polls = Poll.objects.all()
@@ -181,6 +137,8 @@ def poll_list(request):
             'id': poll.id,
             'title': poll.title,
             'description': poll.description,
+            'start_time':  f"{poll.start_date}, {poll.start_time}" ,
+            'end_time': f"{poll.end_date}, {poll.end_time}" ,
             'candidates': [
                 {
                     'id': candidate.id,
@@ -212,23 +170,36 @@ def poll_detail(request, poll_id):
         ]
     }
     return Response(data)
+
 @swagger_auto_schema(method='post', request_body=VoteSerializer)
 @api_view(['POST'])
+@permission_classes([])
 def vote(request):
-    if not request.user.is_authenticated:
-        return Response({'error': 'Требуется токен'}, status=401)
     poll_id = request.data.get('poll_id')
     candidate_id = request.data.get('candidate_id')
-    poll = get_object_or_404(Poll, id=poll_id)
 
-    if poll.end_time and poll.end_time < timezone.now():
-        return Response({'error': 'Время голосования по этому опросу истекло'}, status=400)
+    poll = get_object_or_404(Poll, id=poll_id)
     candidate = get_object_or_404(Candidate, id=candidate_id, poll=poll)
-    voter = request.user
-    if Vote.objects.filter(voter=voter, poll=poll).exists():
+
+    now = timezone.now()
+
+    if poll.start_date and poll.start_time:
+        start_dt = timezone.make_aware(datetime.datetime.combine(poll.start_date, poll.start_time))
+        if now < start_dt:
+            return Response({'error': 'Голосование еще не началось'}, status=400)
+
+    if poll.end_date and poll.end_time:
+        end_dt = timezone.make_aware(datetime.datetime.combine(poll.end_date, poll.end_time))
+        if now > end_dt:
+            return Response({'error': 'Время голосования истекло'}, status=400)
+
+    if Vote.objects.filter(voter=request.user, poll=poll).exists():
         return Response({'error': 'Вы уже голосовали в этом опросе'}, status=400)
-    Vote.objects.create(voter=voter, poll=poll, candidate=candidate)
+
+    Vote.objects.create(voter=request.user, poll=poll, candidate=candidate)
     return Response({'msg': 'Голос принят'})
+
+
 
 @api_view(['GET'])
 def my_votes(request):
@@ -250,7 +221,22 @@ def my_votes(request):
 def create_poll(request):
     serializer = PollCreateSerializer(data=request.data)
     if serializer.is_valid():
-        serializer.save()
+        data= serializer.validated_data
+        start_date = data.get('start_date')
+        start_time = data.get('start_time')
+        end_date = data.get('end_date')
+        end_time = data.get('end_time')
+        if start_time and end_time and start_time >= end_time:
+            return Response({'error': 'Время начала должно быть раньше времени окончания'}, status=400)
+        Poll.objects.create(
+            title=data['title'],
+            description=data['description'],
+            start_date=start_date,
+            start_time=start_time,
+            end_date=end_date,
+            end_time=end_time
+        )
+
         return Response(serializer.data, status=201)
     return Response(serializer.errors, status=400)
 
@@ -260,10 +246,20 @@ def create_poll(request):
 def create_candidate(request):
     serializer = CandidateCreateSerializer(data=request.data)
     if serializer.is_valid():
+        poll = serializer.validated_data.get('poll')
+
+        if poll and poll.end_date and poll.end_time:
+            import datetime
+            from django.utils import timezone
+
+            end_dt = datetime.datetime.combine(poll.end_date, poll.end_time)
+            end_dt = timezone.make_aware(end_dt)
+            if timezone.now() > end_dt:
+                return Response({'error': 'Этот опрос завершен. Добавление кандидатов невозможно.'}, status=400)
+
         serializer.save()
         return Response(serializer.data, status=201)
     return Response(serializer.errors, status=400)
-
 
 @swagger_auto_schema(method='post', request_body=ResetPasswordSerializer)
 @api_view(['POST'])
@@ -384,14 +380,13 @@ def verify_new_phone(request):
     if not user.new_phone:
         return Response({'error': 'Yangi telefon raqam topilmadi'}, status=400)
     
-    # Yangi raqam boshqa tasdiqlangan foydalanuvchiga tegishli emasligini tekshirish
     if Voter.objects.filter(phone=user.new_phone, is_phone_verified=True).exclude(id=user.id).exists():
         return Response({'error': 'Bu telefon raqam allaqachon boshqa foydalanuvchi tomonidan tasdiqlangan'}, status=400)
     
     user.phone = user.new_phone
     user.new_phone = None
     user.phone_change_otp = None
-    user.is_phone_verified = False  # Yangi raqam uchun yana tasdiqlash kerak bo‘lishi mumkin
+    user.is_phone_verified = False  
     user.save()
     otp2 = str(random.randint(100000, 999999))
     user.otp_code = otp2
@@ -411,7 +406,7 @@ def delete_user(request):
     user.delete()
     return Response({'msg': 'Пользователь успешно удален'}, status=204)
 
-@swagger_auto_schema(method='patch')
+@swagger_auto_schema(method='patch',request_body=PollCreateSerializer)
 @api_view(['PATCH'])
 def update_poll(request, poll_id):
     if not request.user.is_authenticated or not request.user.is_staff:
@@ -419,36 +414,47 @@ def update_poll(request, poll_id):
     poll = get_object_or_404(Poll, id=poll_id)
     serializer = PollCreateSerializer(poll, data=request.data, partial=True)
     if serializer.is_valid():
-        serializer.save()
+        data = serializer.validated_data
+        poll.title = data.get('title', poll.title)
+        poll.description = data.get('description', poll.description)
+        poll.start_date = data.get('start_date', poll.start_date)
+        poll.start_time = data.get('start_time', poll.start_time)
+        poll.end_date = data.get('end_date', poll.end_date)
+        poll.end_time = data.get('end_time', poll.end_time)
+        if poll.start_time and poll.end_time and poll.start_time >= poll.end_time:
+            return Response({'error': 'Время начала должно быть раньше времени окончания'}, status=400)
+        poll.save()
         return Response(serializer.data, status=200)
     return Response(serializer.errors, status=400)
 
-@swagger_auto_schema(method='patch')
+@swagger_auto_schema(method='patch', request_body=CandidateCreateSerializer)
 @api_view(['PATCH'])
+@permission_classes([IsStaff])
 def update_candidate(request, candidate_id):
-    if not request.user.is_authenticated or not request.user.is_staff:
-        return Response({'error': 'Требуется токен и права staff'}, status=403)
     candidate = get_object_or_404(Candidate, id=candidate_id)
+
+    poll_id = request.data.get('poll')
+    poll = get_object_or_404(Poll, id=poll_id) if poll_id else candidate.poll
+
+    if poll.end_date and poll.end_time:
+        import datetime
+        from django.utils import timezone
+
+        end_dt = datetime.datetime.combine(poll.end_date, poll.end_time)
+        end_dt = timezone.make_aware(end_dt)
+
+        if timezone.now() > end_dt:
+            return Response({'error': 'Кандидатов нельзя добавить или переместить в завершенный опрос'}, status=400)
+
     serializer = CandidateCreateSerializer(candidate, data=request.data, partial=True)
     if serializer.is_valid():
         serializer.save()
         return Response(serializer.data, status=200)
+
     return Response(serializer.errors, status=400)
 
-@swagger_auto_schema(method='patch')
-@api_view(['PATCH'])
-@permission_classes([IsStaff])
-def update_poll_candidates(request, poll_id):
-    poll = get_object_or_404(Poll, id=poll_id)
-    candidate_ids = request.data.get('candidate_ids')
-    if not isinstance(candidate_ids, list):
-        return Response({'error': 'candidate_ids must be a list of candidate IDs'}, status=400)
-    candidates = Candidate.objects.filter(id__in=candidate_ids, poll=poll)
-    if candidates.count() != len(candidate_ids):
-        return Response({'error': 'Some candidates not found in this poll'}, status=400)
-    poll.candidates.set(candidates)
-    poll.save()
-    return Response({'msg': 'Candidates updated for poll'}, status=200)
+
+
 
 @swagger_auto_schema(method='delete')
 @api_view(['DELETE'])
@@ -492,7 +498,6 @@ def poll_votes(request, poll_id):
     winner_candidates = []
     winner = None
 
-    # Count votes per candidate and track last vote time for tie-break
     for vote in votes.order_by('voted_at'):
         cid = vote.candidate.id
         if cid not in candidate_stats:
@@ -508,7 +513,6 @@ def poll_votes(request, poll_id):
         candidate_stats[cid]['votes'] += 1
         candidate_stats[cid]['last_vote_time'] = vote.voted_at
 
-    # Prepare stats with percent
     stats = []
     max_votes = 0
     for c in candidate_stats.values():
@@ -521,12 +525,10 @@ def poll_votes(request, poll_id):
         if c['votes'] > max_votes:
             max_votes = c['votes']
 
-    # Find all candidates with max votes
     for c in candidate_stats.values():
         if c['votes'] == max_votes:
             winner_candidates.append(c)
 
-    # Tie-break: pick candidate with latest vote
     if winner_candidates:
         winner = max(winner_candidates, key=lambda c: c['last_vote_time'])
 
@@ -540,24 +542,63 @@ def poll_votes(request, poll_id):
 @swagger_auto_schema(method='get')
 @api_view(['GET'])
 def finished_polls(request):
-
     now = timezone.now()
-    polls = Poll.objects.filter(end_time__lt=now)
+    all_polls = Poll.objects.all()
     data = []
-    for poll in polls:
-        candidates = poll.candidates.all()
-        data.append({
-            'id': poll.id,
-            'title': poll.title,
-            'description': poll.description,
-            'end_time': poll.end_time,
-            'candidates': [
-                {
-                    'id': candidate.id,
-                    'name': candidate.name,
-                    'info': candidate.info,
-                    'votes': Vote.objects.filter(candidate=candidate).count()
-                } for candidate in candidates
-            ]
-        })
+
+    for poll in all_polls:
+        if poll.end_date and poll.end_time:
+            end_datetime = datetime.datetime.combine(poll.end_date, poll.end_time)
+            end_datetime = timezone.make_aware(end_datetime)
+
+            if now > end_datetime:
+                candidates = poll.candidates.all()
+                total_votes = Vote.objects.filter(poll=poll).count()
+
+                # 1. Top vote count
+                candidate_votes = {}
+                for c in candidates:
+                    candidate_votes[c.id] = Vote.objects.filter(candidate=c).count()
+
+                if candidate_votes:
+                    max_vote = max(candidate_votes.values())
+                    top_candidates = [cid for cid, v in candidate_votes.items() if v == max_vote]
+
+                    # 2. Break tie using latest vote
+                    if len(top_candidates) > 1:
+                        latest_vote = Vote.objects.filter(
+                            candidate__poll=poll,
+                            candidate__id__in=top_candidates
+                        ).order_by('-voted_at').first()
+                        winner_id = latest_vote.candidate.id if latest_vote else None
+                    else:
+                        winner_id = top_candidates[0]
+                else:
+                    winner_id = None
+
+                candidate_data = []
+                for candidate in candidates:
+                    vote_count = candidate_votes.get(candidate.id, 0)
+                    percentage = (vote_count / total_votes) * 100 if total_votes > 0 else 0
+
+                    candidate_data.append({
+                        'id': candidate.id,
+                        'name': candidate.name,
+                        'info': candidate.info,
+                        'votes': vote_count,
+                        'percentage': f"{percentage:.2f}%",
+                        'winner': candidate.id == winner_id
+                    })
+
+                data.append({
+                    'id': poll.id,
+                    'title': poll.title,
+                    'description': poll.description,
+                    'end_date': poll.end_date,
+                    'end_time': poll.end_time,
+                    'total_votes': total_votes,
+                    'candidates': candidate_data
+                })
+
     return Response(data)
+

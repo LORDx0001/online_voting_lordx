@@ -70,8 +70,11 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+DATETIME_FORMAT = '%d.%m.%Y %H:%M'
+
+
 LANGUAGE_CODE = 'en-us'
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Tashkent'
 USE_I18N = True
 USE_TZ = True
 

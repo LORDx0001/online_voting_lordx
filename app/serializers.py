@@ -19,6 +19,9 @@ class VerifyOtpSerializer(serializers.Serializer):
     phone = serializers.CharField()
     otp = serializers.CharField()
 
+class ResendOtpSerializer(serializers.Serializer):
+    phone = serializers.CharField()
+
 # VerifyOtpSerializer:
 # - Telefon raqami va OTP kodini tekshiradi (OTP tasdiqlash uchun).
 
@@ -37,18 +40,32 @@ class VoteSerializer(serializers.Serializer):
 # VoteSerializer:
 # - Ovoz berish uchun poll_id va candidate_id maydonlarini tekshiradi.
 
+
+
 class PollCreateSerializer(serializers.ModelSerializer):
+
     class Meta:
         model = Poll
-        fields = ['id', 'title', 'description']
+        fields = 'title', 'description', 'start_date', 'start_time', 'end_date', 'end_time'
+
 
 # PollCreateSerializer:
 # - Poll (so'rovnoma) yaratish va ko'rsatish uchun model serializer.
 
+
 class CandidateCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Candidate
-        fields = ['id', 'poll', 'name', 'info']
+        fields = ['poll', 'name', 'info']
+        validators = [
+            serializers.UniqueTogetherValidator(
+                queryset=Candidate.objects.all(),
+                fields=['poll', 'name'],
+                message="Bu nomdagi kandidat ushbu so‘rovda allaqachon mavjud."
+            )
+        ]
+
+
 
 # CandidateCreateSerializer:
 # - Kandidat (nomzod) yaratish va ko'rsatish uchun model serializer.
