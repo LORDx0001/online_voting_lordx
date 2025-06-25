@@ -1,77 +1,105 @@
-# Online Voting System (online_voting_lordx)
+# 🗳️ Online Voting System (LORDx)
 
-A simple and secure online voting system built with Django.
+Oddiy va xavfsiz onlayn ovoz berish tizimi. Django REST Framework asosida qurilgan bo‘lib, foydalanuvchilar ro‘yxatdan o‘tib, ovoz berish jarayonida ishtirok etishlari mumkin. Admin panel orqali foydalanuvchilar, ovozlar va natijalarni boshqarish imkoniyati mavjud.
 
-## Table of Contents
+## ⚙️ Texnologiyalar
+- Python 3.x  
+- Django  
+- Django REST Framework  
+- SQLite  
+- Swagger (drf-yasg)
 
-- [Online Voting System (online_voting_lordx)](#online-voting-system-online_voting_lordx)
-    - [Table of Contents](#table-of-contents)
-    - [Features](#features)
-    - [Technologies Used](#technologies-used)
-    - [Installation](#installation)
-    - [Usage](#usage)
-    - [Contributing](#contributing)
+## 🚀 O‘rnatish
 
-## Features
+Online Voting System’ni ishga tushirish uchun quyidagi bosqichlarni bajaring:
 
-- User registration and authentication
-- Participate in voting processes
-- View voting results
-- Admin dashboard for managing users, votes, and results
+### 1. Repoyni klonlash
 
-## Technologies Used
+```bash
+git clone https://github.com/LORDx0001/online_voting_lordx.git
+cd online_voting_lordx
+```
 
-- Python 3.x
-- Django
-- Django Rest Framework
-- SQLite (default, can be changed)
-- Bootstrap (for frontend, if used)
+### 2. Virtual muhit yaratish va faollashtirish
 
-## Installation
+```bash
+python -m venv venv
+source venv/bin/activate       # Linux/macOS
+venv\Scripts\activate          # Windows
+```
 
-1. Clone the repository:
+### 3. Kutubxonalarni o‘rnatish
 
-     ```bash
-     git clone https://github.com/yourusername/online_voting_lordx.git
-     cd online_voting_lordx
-     ```
+```bash
+pip install --upgrade pip
+pip install -r requirements.txt
+```
 
-2. Create and activate a virtual environment:
+### 4. Migratsiyalarni bajarish
 
-     ```bash
-     python3 -m venv venv
-     source venv/bin/activate
-     ```
+```bash
+python manage.py makemigrations
+python manage.py migrate
+```
 
-3. Install dependencies:
+### 5. Superuser (admin) yaratish
 
-     ```bash
-     pip install -r requirements.txt
-     ```
+```bash
+python manage.py createsuperuser
+```
 
-4. Run migrations:
+### 6. Loyihani ishga tushurish
 
-     ```bash
-     python manage.py migrate
-     ```
+```bash
+python manage.py runserver
+```
 
-5. Create a superuser:
+Endi brauzeringizda `http://127.0.0.1:8000/` manziliga o‘ting.  
+API hujjatlari esa [`http://127.0.0.1:8000/api/swagger/`](http://127.0.0.1:8000/api/swagger/) orqali mavjud.
 
-     ```bash
-     python manage.py createsuperuser
-     ```
+## 🔌 API Hujjatlari
 
-6. Start the development server:
+Swagger orqali barcha endpointlar hujjatlashtirilgan. Ushbu sahifa orqali siz:
+- Endpointlar ro‘yxatini ko‘rishingiz  
+- Parametrlar va javob formatlarini o‘rganishingiz  
+- Bevosita so‘rov yuborishingiz mumkin
 
-     ```bash
-     python manage.py runserver
-     ```
+## 🧪 API Misollari
 
-## Usage
+**Ro‘yxatdan o‘tish:**
+```bash
+curl -X POST http://localhost:8000/api/register/ \
+     -H "Content-Type: application/json" \
+     -d '{"phone_number": "verified_phone_number", "password": "parol"}'
+```
 
-- Open your browser and go to [http://localhost:8000/](http://localhost:8000/)
-- Access the admin panel at [http://localhost:8000/admin/](http://localhost:8000/admin/)
+## 🔐 Avtorizatsiya
 
-## Contributing
+Token asosida autentifikatsiya talab qilinadi. So‘rovlar quyidagicha yuboriladi:
 
-Contributions, pull requests, and issues are welcome!
+```
+Authorization: Bearer <token>
+```
+
+**Ovoz berish:**
+```bash
+curl -X POST http://localhost:8000/api/vote/ \
+     -H "Authorization: Bearer <token>" \
+     -d '{"candidate_id": 3}'
+```
+
+## 📂 Loyihaning Tuzilmasi
+
+```
+.
+├── app/              # Asosiy ilova
+├── config/           # Django konfiguratsiyasi
+├── db.sqlite3        # Ma'lumotlar bazasi
+├── requirements.txt  # Kutubxonalar ro‘yxati
+├── manage.py
+└── README.md
+```
+
+## 🤝 Hissa Qo‘shish
+
+Takliflar va pull requestlar mamnuniyat bilan qabul qilinadi!
