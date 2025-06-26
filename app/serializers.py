@@ -1,58 +1,84 @@
 from rest_framework import serializers
+from django.core.validators import RegexValidator
 from .models import Poll, Candidate
+import random
 
-# Bu faylda barcha API uchun serializerlar joylashgan.
-# Serializerlar ma'lumotlarni tekshiradi va validatsiya qiladi.
-# Har bir serializer API endpoint uchun kiruvchi (input) va chiquvchi (output) ma'lumotlarni aniqlaydi.
+# Validator faqat harflar, bo‘shliq va ba'zi belgilarni ruxsat etadi
+name_regex = RegexValidator(
+    regex=r'^[А-Яа-яA-Za-zёЁ\-\' ]+$',
+    message='Поле должно содержать только буквы, пробел, дефис или апостроф'
+)
 
+# Сериализатор для регистрации нового пользователя
 class RegisterSerializer(serializers.Serializer):
-    first_name = serializers.CharField()
-    last_name = serializers.CharField()
-    phone = serializers.CharField()
-    password = serializers.CharField()
-    role = serializers.ChoiceField(choices=[(1, 'Admin'), (2, 'Voter')], default=2, required=False)
+    first_name = serializers.CharField(
+        min_length=2,
+        validators=[name_regex],
+        error_messages={
+            'required': 'Имя обязательно для заполнения',
+            'min_length': 'Имя должно содержать минимум 2 символа'
+        }
+    )
+    last_name = serializers.CharField(
+        min_length=2,
+        validators=[name_regex],
+        error_messages={
+            'required': 'Фамилия обязательна для заполнения',
+            'min_length': 'Фамилия должна содержать минимум 2 символа'
+        }
+    )
+    phone = serializers.CharField(
+        error_messages={'required': 'Номер телефона обязателен'}
+    )
+    password = serializers.CharField(
+        error_messages={'required': 'Пароль обязателен'}
+    )
+    role = serializers.ChoiceField(
+        choices=[(1, 'Admin'), (2, 'Voter')],
+        default=2,
+        required=False
+    )
 
-# RegisterSerializer:
-# - Ro'yxatdan o'tish uchun: ism, familiya, telefon, parol va rol maydonlarini tekshiradi.
-
+# Сериализатор для подтверждения OTP
 class VerifyOtpSerializer(serializers.Serializer):
-    phone = serializers.CharField()
-    otp = serializers.CharField()
+    phone = serializers.CharField(
+        error_messages={'required': 'Укажите номер телефона'}
+    )
+    otp = serializers.CharField(
+        error_messages={'required': 'Укажите OTP код'}
+    )
 
+# Сериализатор для повторной отправки OTP
 class ResendOtpSerializer(serializers.Serializer):
-    phone = serializers.CharField()
+    phone = serializers.CharField(
+        error_messages={'required': 'Номер телефона обязателен'}
+    )
 
-# VerifyOtpSerializer:
-# - Telefon raqami va OTP kodini tekshiradi (OTP tasdiqlash uchun).
-
+# Сериализатор для входа в систему
 class LoginSerializer(serializers.Serializer):
-    phone = serializers.CharField()
-    password = serializers.CharField()
+    phone = serializers.CharField(
+        error_messages={'required': 'Введите номер телефона'}
+    )
+    password = serializers.CharField(
+        error_messages={'required': 'Введите пароль'}
+    )
 
-
-# LoginSerializer:
-# - Login uchun telefon va parol maydonlarini tekshiradi.
-
+# Сериализатор для голосования
 class VoteSerializer(serializers.Serializer):
-    poll_id = serializers.IntegerField()
-    candidate_id = serializers.IntegerField()
+    poll_id = serializers.IntegerField(
+        error_messages={'required': 'ID опроса обязателен'}
+    )
+    candidate_id = serializers.IntegerField(
+        error_messages={'required': 'ID кандидата обязателен'}
+    )
 
-# VoteSerializer:
-# - Ovoz berish uchun poll_id va candidate_id maydonlarini tekshiradi.
-
-
-
+# Сериализатор для создания опроса
 class PollCreateSerializer(serializers.ModelSerializer):
-
     class Meta:
         model = Poll
-        fields = 'title', 'description', 'start_date', 'start_time', 'end_date', 'end_time'
+        fields = ['title', 'description', 'start_date', 'start_time', 'end_date', 'end_time']
 
-
-# PollCreateSerializer:
-# - Poll (so'rovnoma) yaratish va ko'rsatish uchun model serializer.
-
-
+# Сериализатор для создания кандидата
 class CandidateCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Candidate
@@ -61,40 +87,57 @@ class CandidateCreateSerializer(serializers.ModelSerializer):
             serializers.UniqueTogetherValidator(
                 queryset=Candidate.objects.all(),
                 fields=['poll', 'name'],
-                message="Bu nomdagi kandidat ushbu so‘rovda allaqachon mavjud."
+                message='Кандидат с таким именем уже существует в этом опросе'
             )
         ]
 
-
-
-# CandidateCreateSerializer:
-# - Kandidat (nomzod) yaratish va ko'rsatish uchun model serializer.
-
+# Сериализатор для смены пароля
 class ResetPasswordSerializer(serializers.Serializer):
-    old_password = serializers.CharField(required=True)
-    new_password = serializers.CharField(required=True)
+    old_password = serializers.CharField(
+        error_messages={'required': 'Введите старый пароль'}
+    )
+    new_password = serializers.CharField(
+        error_messages={'required': 'Введите новый пароль'}
+    )
 
-# ResetPasswordSerializer:
-# - Parolni o'zgartirish uchun eski va yangi parol maydonlarini tekshiradi.
-
+# Сериализатор для запроса OTP при восстановлении пароля
 class ForgotPasswordSendOtpSerializer(serializers.Serializer):
-    phone = serializers.CharField(required=True)
+    phone = serializers.CharField(
+        error_messages={'required': 'Номер телефона обязателен'}
+    )
 
-# ForgotPasswordSendOtpSerializer:
-# - Parolni unutgan foydalanuvchi uchun telefon raqamini tekshiradi (OTP yuborish uchun).
-
+# Сериализатор для подтверждения восстановления пароля
 class ForgotPasswordConfirmSerializer(serializers.Serializer):
-    phone = serializers.CharField(required=True)
-    otp = serializers.CharField(required=True)
-    new_password = serializers.CharField(required=True)
+    phone = serializers.CharField(
+        error_messages={'required': 'Номер телефона обязателен'}
+    )
+    otp = serializers.CharField(
+        error_messages={'required': 'Введите OTP код'}
+    )
+    new_password = serializers.CharField(
+        error_messages={'required': 'Введите новый пароль'}
+    )
 
-# ForgotPasswordConfirmSerializer:
-# - Parolni tiklash uchun telefon, OTP va yangi parol maydonlarini tekshiradi.
-import random
-
+# Сериализатор для смены имени и фамилии
 class ChangeNameSerializer(serializers.Serializer):
-    first_name = serializers.CharField(required=True)
-    last_name = serializers.CharField(required=True)
+    first_name = serializers.CharField(
+        required=True,
+        min_length=2,
+        validators=[name_regex],
+        error_messages={
+            'required': 'Имя обязательно',
+            'min_length': 'Имя должно содержать минимум 2 символа'
+        }
+    )
+    last_name = serializers.CharField(
+        required=True,
+        min_length=2,
+        validators=[name_regex],
+        error_messages={
+            'required': 'Фамилия обязательна',
+            'min_length': 'Фамилия должна содержать минимум 2 символа'
+        }
+    )
 
     def update(self, instance, validated_data):
         instance.first_name = validated_data.get('first_name', instance.first_name)
@@ -102,8 +145,12 @@ class ChangeNameSerializer(serializers.Serializer):
         instance.save()
         return instance
 
+# Сериализатор для смены номера телефона с отправкой OTP
 class ChangePhoneNumberSerializer(serializers.Serializer):
-    phone = serializers.CharField(required=True)
+    phone = serializers.CharField(
+        required=True,
+        error_messages={'required': 'Номер телефона обязателен'}
+    )
 
     def validate(self, attrs):
         phone = attrs.get('phone')
@@ -122,28 +169,35 @@ class ChangePhoneNumberSerializer(serializers.Serializer):
             otp = validated_data.get('otp')
             otp_code = validated_data.get('otp_code') or instance.otp_code
             if not otp:
-                raise serializers.ValidationError({'otp': 'Telefon raqamni tasdiqlash uchun OTP kiriting'})
+                raise serializers.ValidationError({'otp': 'Введите OTP код для подтверждения номера'})
             if otp != otp_code:
-                raise serializers.ValidationError({'otp': 'OTP noto‘g‘ri'})
+                raise serializers.ValidationError({'otp': 'Неверный OTP код'})
             instance.is_phone_verified = True
             instance.otp_code = None
             instance.phone = validated_data['phone']
         instance.save()
         return instance
-    
+
+# Сериализатор для подтверждения смены номера телефона
 class ChangePhoneNumberVerifySerializer(serializers.Serializer):
-    phone = serializers.CharField(required=True)
-    otp = serializers.CharField(required=True)
+    phone = serializers.CharField(
+        required=True,
+        error_messages={'required': 'Номер телефона обязателен'}
+    )
+    otp = serializers.CharField(
+        required=True,
+        error_messages={'required': 'Введите OTP код'}
+    )
 
     def validate(self, attrs):
         user = self.instance
         phone = attrs.get('phone')
         otp = attrs.get('otp')
-        # Yangi raqam va OTP tekshiriladi
+
         if not user.new_phone or user.new_phone != phone:
-            raise serializers.ValidationError({'phone': 'Yangi telefon raqam noto‘g‘ri yoki kiritilmagan'})
+            raise serializers.ValidationError({'phone': 'Неверный или неподтверждённый номер телефона'})
         if not user.otp_code or otp != user.otp_code:
-            raise serializers.ValidationError({'otp': 'OTP noto‘g‘ri'})
+            raise serializers.ValidationError({'otp': 'Неверный OTP код'})
         return attrs
 
     def save(self, **kwargs):

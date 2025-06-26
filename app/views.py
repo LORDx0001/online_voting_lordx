@@ -33,12 +33,15 @@ def register(request):
     last_name = request.data.get('last_name')
     phone = request.data.get('phone')
     password = request.data.get('password')
-    role = int(request.data.get('role', 2))  # 2-voter, 3-staff
-    phone_pattern = r'^\+998\d{9}$'
+    role = int(request.data.get('role', 2))  
     if not all([first_name, last_name, phone, password]):
-        return Response({'error': 'Заполните все поля'}, status=400)
+        return Response({'error': 'Пожалуйста, заполните все поля'}, status=400)
+
+    phone_pattern = r'^\+998\d{9}$'
     if not re.match(phone_pattern, phone):
-        return Response({'error': 'Телефон номер должен начинаться с +998 и состоять из 13 символов. Например: +998901234567'}, status=400)
+        return Response({
+            'error': 'Номер телефона должен начинаться с +998 и содержать 13 цифр. Пример: +998901234567'
+        }, status=400)
 
     existing_voter = Voter.objects.filter(phone=phone).first()
     if existing_voter:
@@ -48,35 +51,33 @@ def register(request):
             existing_voter.set_password(password)  
             existing_voter.save()
             send_otp_to_telegram(phone, otp)
-            return Response({'msg': 'Телефон номер еще не подтвержден. Новый OTP код отправлен.'}, status=200)
+            return Response({
+                'message': 'Номер телефона еще не подтвержден. Новый OTP код отправлен в Telegram.'
+            }, status=200)
         else:
-            return Response({'error': 'Этот телефон номер уже зарегистрирован'}, status=400)
+            return Response({
+                'error': 'Этот номер телефона уже зарегистрирован'
+            }, status=400)
 
-    if role == 3:
-        voter = Voter.objects.create_user(
-            first_name=first_name,
-            last_name=last_name,
-            phone=phone,
-            password=password,
-            role=role,
-            is_staff=True,
-            is_superuser=False,
-        )
-    else:
-        voter = Voter.objects.create_user(
-            first_name=first_name,
-            last_name=last_name,
-            phone=phone,
-            password=password,
-            role=role,
-            is_staff=False,
-            is_superuser=False,
-        )
+    is_staff = True if role == 3 else False
+    voter = Voter.objects.create_user(
+        first_name=first_name,
+        last_name=last_name,
+        phone=phone,
+        password=password,
+        role=role,
+        is_staff=is_staff,
+        is_superuser=False,
+    )
     voter.is_phone_verified = False
     voter.otp_code = str(random.randint(100000, 999999))
     voter.save()
+
     send_otp_to_telegram(phone, voter.otp_code)
-    return Response({'msg': 'Вы успешно зарегистрировались. OTP код отправлен в Telegram.'}, status=201)
+    return Response({
+        'message': 'Регистрация прошла успешно. OTP код отправлен в Telegram.'
+    }, status=200)
+
 
 @swagger_auto_schema(method='post', request_body=VerifyOtpSerializer)
 @api_view(['POST'])
@@ -84,30 +85,43 @@ def verify_otp(request):
     phone = request.data.get('phone')
     otp = request.data.get('otp')
     if not phone or not otp:
-        return Response({'error': 'Телефон номер и OTP обязательны'}, status=400)
+        return Response({'error': 'Номер телефона и OTP обязательны для заполнения'}, status=400)
+    
     voter = get_object_or_404(Voter, phone=phone)
+    
     if not voter.otp_code or voter.otp_code != otp:
-        return Response({'error': 'OTP неверный или срок действия истек'}, status=400)
+        return Response({'error': 'Неверный OTP код или срок его действия истёк'}, status=400)
+
     voter.is_phone_verified = True
     voter.otp_code = None
     voter.save()
+
     refresh = RefreshToken.for_user(voter)
-    return Response({'msg': 'Телефон номер подтвержден.'})
+    return Response({'msg': 'Номер телефона успешно подтверждён.'})
+
 
 @swagger_auto_schema(method='post', request_body=LoginSerializer)
 @api_view(['POST'])
 def login_view(request):
     phone = request.data.get('phone')
     password = request.data.get('password')
+
     voter = authenticate(request, phone=phone, password=password)
+
     if voter is None or not voter.is_phone_verified:
-        return Response({'error': 'Логин или пароль неверный, либо телефон номер не подтвержден'}, status=400)
+        return Response(
+            {'error': 'Неверный номер телефона или пароль, либо номер телефона не подтвержден'},
+            status=400
+        )
+
     refresh = RefreshToken.for_user(voter)
+
     return Response({
-        'msg': 'Успешный вход.',
+        'message': 'Успешный вход.',
         'refresh': str(refresh),
         'access': str(refresh.access_token),
     })
+
 
 @swagger_auto_schema(method='post', request_body=ResendOtpSerializer)
 @api_view(['POST'])
@@ -124,7 +138,7 @@ def resend_otp(request):
     voter.otp_code = otp
     voter.save()
     send_otp_to_telegram(phone, otp)
-    return Response({'msg': 'Новый OTP код отправлен.'}, status=200)
+    return Response({'message': 'Новый OTP код отправлен.'}, status=200)
 
 @swagger_auto_schema(method= 'get')
 @api_view(['GET'])
@@ -197,7 +211,7 @@ def vote(request):
         return Response({'error': 'Вы уже голосовали в этом опросе'}, status=400)
 
     Vote.objects.create(voter=request.user, poll=poll, candidate=candidate)
-    return Response({'msg': 'Голос принят'})
+    return Response({'message': 'Голос принят'})
 
 
 
@@ -276,7 +290,7 @@ def reset_password(request):
         return Response({'error': 'Старый пароль неверный'}, status=400)
     user.set_password(new_password)
     user.save()
-    return Response({'msg': 'Пароль успешно изменен'})
+    return Response({'messga': 'Пароль успешно изменен'})
 
 @swagger_auto_schema(method='post', request_body=ForgotPasswordSendOtpSerializer)
 @api_view(['POST'])
@@ -292,7 +306,7 @@ def forgot_password(request):
     voter.otp_code = otp
     voter.save()
     send_otp_to_telegram(phone, otp)
-    return Response({'msg': 'OTP код отправлен на Telegram'}, status=200)
+    return Response({'message': 'OTP код отправлен на Telegram'}, status=200)
 
 @swagger_auto_schema(method='post', request_body=ForgotPasswordConfirmSerializer)
 @api_view(['POST'])
@@ -309,13 +323,13 @@ def forgot_password_confirm(request):
     voter.set_password(new_password)
     voter.otp_code = None
     voter.save()
-    return Response({'msg': 'Пароль успешно изменен'}, status=200)
+    return Response({'message': 'Пароль успешно изменен'}, status=200)
 
 @swagger_auto_schema(method='get')
 @api_view(['GET'])
 def user_info(request):
     if not request.user.is_authenticated:
-        return Response({'error': 'Требуется токен'}, status=401)
+        return Response({'error': 'Требуется токен'}, status=400)
     user = request.user
     data = {
         'id': user.id,
@@ -333,12 +347,12 @@ def user_info(request):
 @api_view(['PATCH'])
 def change_name(request):
     if not request.user.is_authenticated:
-        return Response({'error': 'Требуется токен'}, status=401)
+        return Response({'error': 'Требуется токен'}, status=400)
     user = request.user
     serializer = ChangeNameSerializer(user, data=request.data, partial=True)
     if serializer.is_valid():
         serializer.save()
-        return Response({'msg': 'Имя пользователя успешно обновлено'})
+        return Response({'message': 'Имя пользователя успешно обновлено'})
     return Response(serializer.errors, status=400)
 
 @swagger_auto_schema(method='patch', request_body=ChangePhoneNumberSerializer)
@@ -354,15 +368,15 @@ def change_phone(request):
     if not re.match(phone_pattern, new_phone):
         return Response({'error': 'Телефон номер должен начинаться с +998 и состоять из 13 символов. Например: +998901234567'}, status=400)
     if user.phone == new_phone:
-        return Response({'error': 'Yangi telefon raqam eski raqam bilan bir xil bo‘lishi mumkin emas'}, status=400)
+        return Response({'error': 'Новый номер телефона не может совпадать со старым номером'}, status=400)
     if Voter.objects.filter(phone=new_phone, is_phone_verified=True):
-        return Response({'error': 'Bu telefon raqam allaqachon boshqa foydalanuvchi tomonidan tasdiqlangan'}, status=400)
+        return Response({'error': 'Этот номер телефона уже был подтвержден другим пользователем.'}, status=400)
     otp = str(random.randint(100000, 999999))
     user.new_phone = new_phone
     user.phone_change_otp = otp
     user.save()
     send_otp_to_telegram(user.phone, otp)
-    return Response({'msg': 'Telefon raqamni o‘zgartirish uchun OTP eski raqamga yuborildi'})
+    return Response({'message': 'OTP отправлен на старый номер для смены номера телефона'})
 
 
 
@@ -370,24 +384,29 @@ def change_phone(request):
 @api_view(['POST'])
 def verify_new_phone(request):
     if not request.user.is_authenticated:
-        return Response({'error': 'Требуется токен'}, status=401)
+        return Response({'error': 'Требуется авторизация (токен)'}, status=401)
+    
     user = request.user
     otp = request.data.get('otp')
+    
     if not otp:
-        return Response({'error': 'OTP talab qilinadi'}, status=400)
+        return Response({'error': 'OTP код обязателен'}, status=400)
+    
     if not user.phone_change_otp or user.phone_change_otp != otp:
-        return Response({'error': 'OTP noto‘g‘ri yoki muddati o‘tgan'}, status=400)
+        return Response({'error': 'Неверный или просроченный OTP код'}, status=400)
+    
     if not user.new_phone:
-        return Response({'error': 'Yangi telefon raqam topilmadi'}, status=400)
+        return Response({'error': 'Новый номер телефона не найден'}, status=400)
     
     if Voter.objects.filter(phone=user.new_phone, is_phone_verified=True).exclude(id=user.id).exists():
-        return Response({'error': 'Bu telefon raqam allaqachon boshqa foydalanuvchi tomonidan tasdiqlangan'}, status=400)
+        return Response({'error': 'Этот номер телефона уже подтверждён другим пользователем'}, status=400)
     
     user.phone = user.new_phone
     user.new_phone = None
     user.phone_change_otp = None
-    user.is_phone_verified = False  
+    user.is_phone_verified = False
     user.save()
+
     otp2 = str(random.randint(100000, 999999))
     user.otp_code = otp2
     user.save()
@@ -395,16 +414,19 @@ def verify_new_phone(request):
 
     logout(request)
 
-    return Response({'msg': 'Phone number changed successfully. You have been logged out. Please verify your new number.'})
+    return Response({
+        'message': 'Номер телефона успешно изменён. Вы вышли из системы. Пожалуйста, подтвердите новый номер.'
+    })
+
 
 @swagger_auto_schema(method='delete')
 @api_view(['DELETE'])
 def delete_user(request):
     if not request.user.is_authenticated:
-        return Response({'error': 'Требуется токен'}, status=401)
+        return Response({'error': 'Требуется токен'}, status=400)
     user = request.user
     user.delete()
-    return Response({'msg': 'Пользователь успешно удален'}, status=204)
+    return Response({'message': 'Пользователь успешно удален'}, status=200)
 
 @swagger_auto_schema(method='patch',request_body=PollCreateSerializer)
 @api_view(['PATCH'])
@@ -462,7 +484,7 @@ def update_candidate(request, candidate_id):
 def delete_poll(request, poll_id):
     poll = get_object_or_404(Poll, id=poll_id)
     poll.delete()
-    return Response({'msg': 'Poll deleted successfully'}, status=204)
+    return Response({'message': 'Опрос успешно удален'}, status=200)
 
 @swagger_auto_schema(method='delete')
 @api_view(['DELETE'])
@@ -470,7 +492,7 @@ def delete_poll(request, poll_id):
 def delete_candidate(request, candidate_id):
     candidate = get_object_or_404(Candidate, id=candidate_id)
     candidate.delete()
-    return Response({'msg': 'Candidate deleted successfully'}, status=204)
+    return Response({'message': 'Кандидат успешно удален'}, status=200)
 
 @swagger_auto_schema(method='get')
 @api_view(['GET'])
@@ -555,7 +577,6 @@ def finished_polls(request):
                 candidates = poll.candidates.all()
                 total_votes = Vote.objects.filter(poll=poll).count()
 
-                # 1. Top vote count
                 candidate_votes = {}
                 for c in candidates:
                     candidate_votes[c.id] = Vote.objects.filter(candidate=c).count()
@@ -564,7 +585,6 @@ def finished_polls(request):
                     max_vote = max(candidate_votes.values())
                     top_candidates = [cid for cid, v in candidate_votes.items() if v == max_vote]
 
-                    # 2. Break tie using latest vote
                     if len(top_candidates) > 1:
                         latest_vote = Vote.objects.filter(
                             candidate__poll=poll,
